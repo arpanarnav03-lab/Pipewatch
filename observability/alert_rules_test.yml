@@ -1,0 +1,105 @@
+# Run with: promtool test rules observability/alert_rules_test.yml
+rule_files:
+  - alert_rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: stale data fires only after the 2h threshold
+    interval: 1m
+    input_series:
+      - series: 'pipewatch_last_data_timestamp_seconds{pipeline="weather"}'
+        values: "0x200"
+    alert_rule_test:
+      - alertname: DataStale
+        eval_time: 90m
+        exp_alerts: []
+      - alertname: DataStale
+        eval_time: 125m
+        exp_alerts:
+          - exp_labels: {severity: critical, pipeline: weather}
+            exp_annotations:
+              summary: "weather: newest curated data is over 2h old"
+              description: "Data lag is 2h 5m 0s. See docs/runbook.md#datastale"
+
+  - name: critical check failure alerts immediately and clears on recovery
+    interval: 1m
+    input_series:
+      - series: 'pipewatch_check_failed{pipeline="weather",check="schema_drift",severity="critical"}'
+        values: "0 0 1 1 0 0"
+    alert_rule_test:
+      - alertname: CriticalCheckFailed
+        eval_time: 1m
+        exp_alerts: []
+      - alertname: CriticalCheckFailed
+        eval_time: 3m
+        exp_alerts:
+          - exp_labels: {severity: critical, pipeline: weather, check: schema_drift}
+            exp_annotations:
+              summary: "weather: critical check 'schema_drift' failed"
+              description: "The batch was quarantined. See docs/runbook.md#criticalcheckfailed"
+      - alertname: CriticalCheckFailed
+        eval_time: 5m
+        exp_alerts: []
+
+  - name: warning checks use warning severity
+    interval: 1m
+    input_series:
+      - series: 'pipewatch_check_failed{pipeline="weather",check="duplicate_keys",severity="warning"}'
+        values: "0 1"
+    alert_rule_test:
+      - alertname: WarningCheckFailed
+        eval_time: 1m
+        exp_alerts:
+          - exp_labels: {severity: warning, pipeline: weather, check: duplicate_keys}
+            exp_annotations:
+              summary: "weather: check 'duplicate_keys' failed"
+              description: "Data was loaded but looks suspicious. See docs/runbook.md#warningcheckfailed"
+
+  - name: 30 percent row-count drop vs 7-day average fires, normal variation does not
+    interval: 1m
+    input_series:
+      - series: 'pipewatch_rows_fetched{pipeline="weather"}'
+        values: "120x100 100x5 48x3"
+    alert_rule_test:
+      - alertname: RowCountDrop
+        eval_time: 103m
+        exp_alerts: []
+      - alertname: RowCountDrop
+        eval_time: 107m
+        exp_alerts:
+          - exp_labels: {severity: critical, pipeline: weather}
+            exp_annotations:
+              summary: "weather: rows fetched dropped more than 30% vs 7-day average"
+              description: "Fetched 48 rows. See docs/runbook.md#rowcountdrop"
+
+  - name: failed latest run alerts
+    interval: 1m
+    input_series:
+      - series: 'pipewatch_last_run_ok{pipeline="weather"}'
+        values: "1 1 0"
+    alert_rule_test:
+      - alertname: PipelineRunFailing
+        eval_time: 1m
+        exp_alerts: []
+      - alertname: PipelineRunFailing
+        eval_time: 2m
+        exp_alerts:
+          - exp_labels: {severity: critical, pipeline: weather}
+            exp_annotations:
+              summary: "weather: latest run did not succeed"
+              description: "Run was quarantined or crashed. See docs/runbook.md#pipelinerunfailing"
+
+  - name: service down alerts after one minute
+    interval: 1m
+    input_series:
+      - series: 'up{job="pipewatch",instance="app:8000"}'
+        values: "1 0 0 0"
+    alert_rule_test:
+      - alertname: PipeWatchDown
+        eval_time: 3m
+        exp_alerts:
+          - exp_labels: {severity: critical, job: pipewatch, instance: "app:8000"}
+            exp_annotations:
+              summary: "PipeWatch service is not being scraped"
+              description: "See docs/runbook.md#pipewatchdown"

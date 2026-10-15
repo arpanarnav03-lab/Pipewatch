@@ -1,0 +1,3 @@
+image        = "ghcr.io/YOUR_GITHUB_USERNAME/pipewatch:latest"
+allowed_cidr = "203.0.113.7/32" # your public IP
+region       = "ap-south-1"

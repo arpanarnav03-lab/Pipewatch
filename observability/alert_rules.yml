@@ -1,0 +1,62 @@
+groups:
+  - name: pipewatch-data-trust
+    rules:
+      - alert: DataStale
+        expr: time() - pipewatch_last_data_timestamp_seconds > 7200
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.pipeline }}: newest curated data is over 2h old"
+          description: "Data lag is {{ $value | humanizeDuration }}. See docs/runbook.md#datastale"
+
+      - alert: CriticalCheckFailed
+        expr: pipewatch_check_failed{severity="critical"} == 1
+        for: 0m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.pipeline }}: critical check '{{ $labels.check }}' failed"
+          description: "The batch was quarantined. See docs/runbook.md#criticalcheckfailed"
+
+      - alert: WarningCheckFailed
+        expr: pipewatch_check_failed{severity="warning"} == 1
+        for: 0m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.pipeline }}: check '{{ $labels.check }}' failed"
+          description: "Data was loaded but looks suspicious. See docs/runbook.md#warningcheckfailed"
+
+      - alert: RowCountDrop
+        expr: |
+          pipewatch_rows_fetched
+            < 0.7 * avg_over_time(pipewatch_rows_fetched[7d] offset 1m)
+        for: 0m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.pipeline }}: rows fetched dropped more than 30% vs 7-day average"
+          description: "Fetched {{ $value }} rows. See docs/runbook.md#rowcountdrop"
+
+  - name: pipewatch-pipeline-health
+    rules:
+      - alert: PipelineRunFailing
+        expr: pipewatch_last_run_ok == 0
+        for: 0m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.pipeline }}: latest run did not succeed"
+          description: "Run was quarantined or crashed. See docs/runbook.md#pipelinerunfailing"
+
+      - alert: PipelineNotRunning
+        expr: time() - pipewatch_last_run_timestamp_seconds > 10800
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.pipeline }}: no run in the last 3 hours"
+          description: "Scheduler may be stuck. See docs/runbook.md#pipelinenotrunning"
+
+      - alert: PipeWatchDown
+        expr: up{job="pipewatch"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "PipeWatch service is not being scraped"
+          description: "See docs/runbook.md#pipewatchdown"

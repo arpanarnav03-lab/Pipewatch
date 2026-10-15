@@ -1,0 +1,21 @@
+route:
+  receiver: pipewatch-webhook
+  group_by: [alertname, pipeline]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+
+receivers:
+  # Default: post back to PipeWatch, which logs and stores alerts (used for detection-time reports).
+  - name: pipewatch-webhook
+    webhook_configs:
+      - url: http://app:8000/alerts/webhook
+        send_resolved: true
+
+  # To also notify Slack, add this to the receiver above (keep the URL out of git, mount as a file):
+  #   slack_configs:
+  #     - api_url_file: /etc/alertmanager/slack_webhook_url
+  #       channel: "#data-alerts"
+  #       send_resolved: true
+  #       title: "{{ .CommonAnnotations.summary }}"
+  #       text: "{{ .CommonAnnotations.description }}"
